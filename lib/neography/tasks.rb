@@ -1,13 +1,12 @@
 # borrowed from architect4r
 require 'os'
-require 'httpclient'
 require 'zip'
 require 'net/http'
 
 namespace :neo4j do
   desc "Install Neo4j"
   task :install, :edition, :version do |t, args|
-    args.with_defaults(:edition => "community", :version => "2.0.1")
+    args.with_defaults(:edition => "community", :version => "2.2.5")
     puts "Installing Neo4j-#{args[:edition]}-#{args[:version]}"
     
     if OS::Underlying.windows?
@@ -59,6 +58,14 @@ namespace :neo4j do
     puts "Type 'rake neo4j:start' to start it"
   end
   
+  desc "Unsecure the Neo4j Server (for testing only)"
+  task :unsecure do
+    properties_file = "neo4j/conf/neo4j-server.properties"
+    text = File.read(properties_file)
+    new_contents = text.gsub(/dbms.security.auth_enabled=true/, "dbms.security.auth_enabled=false")
+    File.open(properties_file, "w") {|file| file.puts new_contents }
+  end  
+    
   desc "Start the Neo4j Server"
   task :start do
     puts "Starting Neo4j..."
@@ -128,11 +135,11 @@ namespace :neo4j do
          %x[neo4j/bin/Neo4j.bat stop]
          
         # Reset the database
-        FileUtils.rm_rf("neo4j/data/graph.db")
+        FileUtils.rm_rf("neo4j/data/graph.db") if File.exist?("neo4j/data/graph.db")
         FileUtils.mkdir("neo4j/data/graph.db")
         
         # Remove log files
-        FileUtils.rm_rf("neo4j/data/log")
+        FileUtils.rm_rf("neo4j/data/log") if File.exist?("neo4j/data/log")
         FileUtils.mkdir("neo4j/data/log")
 
         %x[neo4j/bin/Neo4j.bat start]
@@ -143,11 +150,11 @@ namespace :neo4j do
       %x[neo4j/bin/neo4j stop]
       
       # Reset the database
-      FileUtils.rm_rf("neo4j/data/graph.db")
+      FileUtils.rm_rf("neo4j/data/graph.db") if File.exist?("neo4j/data/graph.db")
       FileUtils.mkdir("neo4j/data/graph.db")
       
       # Remove log files
-      FileUtils.rm_rf("neo4j/data/log")
+      FileUtils.rm_rf("neo4j/data/log") if File.exist?("neo4j/data/log")
       FileUtils.mkdir("neo4j/data/log")
       
       # Start the server
@@ -156,12 +163,15 @@ namespace :neo4j do
   end
 
   task :get_spatial, :version  do |t, args|
-    args.with_defaults(:version => "2.0.1")
+    args.with_defaults(:version => "2.1.4")
     puts "Installing Neo4j-Spatial #{args[:version]}"
 
       unless File.exist?('neo4j-spatial.zip')
         df = File.open('neo4j-spatial.zip', 'wb')
         case args[:version]
+          when "2.1.4"
+            dist = "m2.neo4j.org"
+            request = "/content/repositories/releases/org/neo4j/neo4j-spatial/0.13-neo4j-2.1.4/neo4j-spatial-0.13-neo4j-2.1.4-server-plugin.zip"
           when "2.0.1"
             dist = "m2.neo4j.org"
             request = "/content/repositories/releases/org/neo4j/neo4j-spatial/0.13-neo4j-2.0.1/neo4j-spatial-0.13-neo4j-2.0.1-server-plugin.zip"

@@ -7,18 +7,28 @@ module Neography
         do_batch(*args)
       end
 
+      def batch_no_streaming(*args)
+        do_batch_no_streaming(*args)
+      end
+
       private
 
       def do_batch(*args)
+        @connection.post("/batch", compute_batch_options(*args))
+      end
+
+      def do_batch_no_streaming(*args)
+        options = compute_batch_options(*args)
+        options[:headers].merge!({ 'X-Stream' => false })
+        @connection.post("/batch", options)
+      end
+
+      def compute_batch_options(*args)
         batch = []
         Array(args).each_with_index do |c, i|
           batch << {:id => i }.merge(get_batch(c))
         end
-        options = {
-          :body => batch.to_json,
-          :headers => json_content_type
-        }
-        @connection.post("/batch", options)
+        {:body => batch.to_json, :headers => json_content_type}
       end
 
       def get_batch(args)
@@ -66,6 +76,16 @@ module Neography
 
       def batch_create_unique_node(index, key, value, properties)
         post "/index/node/%{index}?unique" % {:index => index} do
+          {
+            :key        => key,
+            :value      => value,
+            :properties => properties
+          }
+        end
+      end
+      
+      def batch_create_or_fail_unique_node(index, key, value, properties = {})
+        post "/index/node/%{index}?uniqueness=%{function}" %  {:index => index, :function => 'create_or_fail'} do
           {
             :key        => key,
             :value      => value,

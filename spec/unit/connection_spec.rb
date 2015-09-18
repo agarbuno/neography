@@ -8,7 +8,7 @@ module Neography
     context "defaults" do
 
       it "intializes with defaults" do
-        connection.configuration.should == "http://localhost:7474"
+        expect(connection.configuration).to eq("http://localhost:7474")
       end
 
     end
@@ -20,7 +20,7 @@ module Neography
       context "hash options" do
         let(:options) do
           {
-            :protocol           => "https://",
+            :protocol           => "https",
             :server             => "foobar",
             :port               => 4242,
             :directory          => "/dir",
@@ -38,64 +38,106 @@ module Neography
         end
 
         it "accepts all options in a hash" do
-          connection.configuration.should == "https://foobar:4242/dir"
+          expect(connection.configuration).to eq("https://foobar:4242/dir")
 
-          connection.protocol.should           == "https://"
-          connection.server.should             == "foobar"
-          connection.port.should               == 4242
-          connection.directory.should          == "/dir"
-          connection.cypher_path.should        == "/cyph"
-          connection.gremlin_path.should       == "/grem"
-          connection.log_file.should           == "neo.log"
-          connection.log_enabled.should        == false
-          connection.slow_log_threshold.should == 0
-          connection.max_threads.should        == 10
-          connection.parser.should             == Foo
+          expect(connection.protocol).to           eq("https")
+          expect(connection.server).to             eq("foobar")
+          expect(connection.port).to               eq(4242)
+          expect(connection.directory).to          eq("/dir")
+          expect(connection.cypher_path).to        eq("/cyph")
+          expect(connection.gremlin_path).to       eq("/grem")
+          expect(connection.log_file).to           eq("neo.log")
+          expect(connection.log_enabled).to        eq(false)
+          expect(connection.slow_log_threshold).to eq(0)
+          expect(connection.max_threads).to        eq(10)
+          expect(connection.parser).to             eq(Foo)
 
-          connection.authentication.should == {
+          expect(connection.authentication).to eq({
             :foo_auth => {
               :username => "bar",
               :password => "baz"
             }
-          }
+          })
+        end
+
+        context "httpclient" do
+          let(:httpclient) { double(:http_client) }
+          let(:options) do
+            {
+              :http_send_timeout     => 120,
+              :http_receive_timeout  => 100
+            }
+          end
+
+          it 'configures send/receive timeout' do
+            expect(Excon).to receive(:new).with("http://localhost:7474", 
+                                    :read_timeout => 100, 
+                                    :write_timeout => 120,
+                                    :persistent=>true, 
+                                    :user=>nil, 
+                                    :password=>nil).and_return(httpclient)
+            connection
+          end
+        end
+
+        context "persistent" do
+          let(:persistent) { double(:persistent)}
+          let(:options) do
+            {
+              :persistent => false
+            }
+          end
+
+          it 'configures persistent' do
+            expect(Excon).to receive(:new).with("http://localhost:7474",
+                                                :read_timeout => 1200,
+                                                :write_timeout => 1200,
+                                                :persistent => false,
+                                                :user => nil,
+                                                :password => nil).and_return(persistent)
+            connection
+          end
         end
       end
+
+
 
       context "string option" do
         let(:options) { "https://user:pass@somehost:8585/path" }
 
         it "accepts a string as configuration" do
-          connection.configuration.should == "https://somehost:8585/path"
-          connection.authentication.should == {
+          expect(connection.configuration).to eq("https://somehost:8585/path")
+          expect(connection.authentication).to eq({
             :basic_auth => {
               :username => "user",
               :password => "pass"
             }
-          }
+          })
         end
       end
 
     end
 
     context "requests" do
+      let(:response) { double("response", :status => 200, :body=> "").as_null_object }
 
       it "does a GET request" do
-        connection.client.should_receive(:get).with("http://localhost:7474/db/data/node/bar", nil, nil) { double.as_null_object }
+        expect(connection.client).to receive(:request).with(:method => :get, :path => "/db/data/node/bar", :body => nil, :headers => nil) { response }
         connection.get("/node/bar")
       end
 
       it "does a POST request" do
-        connection.client.should_receive(:post).with("http://localhost:7474/db/data/node/bar", nil, nil) { double.as_null_object }
+        expect(connection.client).to receive(:request).with(:method => :post, :path => "/db/data/node/bar", :body => nil, :headers => nil) { response }
         connection.post("/node/bar")
       end
 
       it "does a PUT request" do
-        connection.client.should_receive(:put).with("http://localhost:7474/db/data/node/bar", nil, nil) { double.as_null_object }
+        expect(connection.client).to receive(:request).with(:method => :put, :path => "/db/data/node/bar", :body => nil, :headers => nil) { response }
         connection.put("/node/bar")
       end
 
       it "does a DELETE request" do
-        connection.client.should_receive(:delete).with("http://localhost:7474/db/data/node/bar", nil, nil) { double.as_null_object }
+        expect(connection.client).to receive(:request).with(:method => :delete, :path => "/db/data/node/bar", :body => nil, :headers => nil) { response }
         connection.delete("/node/bar")
       end
 
@@ -109,33 +151,41 @@ module Neography
         end
 
         it "does requests with authentication" do
-          connection.client.should_not_receive(:set_auth).with(
+          expect(connection.client).not_to receive(:set_auth).with(
             "http://localhost:7474/db/data/node/bar",
              "foo",
-             "bar") { double.as_null_object }
+             "bar") { response }
 
-          connection.client.should_receive(:get).with(
-            "http://localhost:7474/db/data/node/bar", nil, nil
-            ) { double.as_null_object }
+          expect(connection.client).to receive(:request).with(
+            :method => :get, :path => "/db/data/node/bar", :body => nil, :headers => nil) { response }
 
           connection.get("/node/bar")
         end
       end
 
       it "adds the User-Agent to the headers" do
-        connection.client.should_receive(:get).with(
-          "http://localhost:7474/db/data/node/bar",
-          nil, { "User-Agent" => "Neography/#{Neography::VERSION}", "X-Stream"=>true, "max-execution-time"=>6000}
-          ) { double.as_null_object }
+        expect(connection.client).to receive(:request).with(
+            hash_including(
+                {:method => :get, :path => "/db/data/node/bar", :body => nil,
+                 :headers => {"User-Agent" => "Neography/#{Neography::VERSION}", "X-Stream"=>true, "max-execution-time" => 6000}}
+            )
+        ) { response }
 
         connection.get("/node/bar", :headers => {})
       end
 
       context "errors" do
 
+        subject(:connection) do
+          Connection.new({
+            :logger => Logger.new(nil),
+            :log_enabled => true
+          })
+        end
+
         it "raises NodeNotFoundException" do
           response = error_response(code: 404, message: "a message", exception: "NodeNotFoundException")
-          connection.client.stub(:get).and_return(response)
+          allow(connection.client).to receive(:request).and_return(response)
           expect {
             connection.get("/node/bar")
           }.to raise_error NodeNotFoundException
@@ -143,7 +193,7 @@ module Neography
 
         it "raises OperationFailureException" do
           response = error_response(code: 409, message: "a message", exception: "OperationFailureException")
-          connection.client.stub(:get).and_return(response)
+          allow(connection.client).to receive(:request).and_return(response)
           expect {
             connection.get("/node/bar")
           }.to raise_error OperationFailureException
@@ -151,7 +201,7 @@ module Neography
 
         it "raises PropertyValueException" do
           response = error_response(code: 400, message: "a message", exception: "PropertyValueException")
-          connection.client.stub(:get).and_return(response)
+          allow(connection.client).to receive(:request).and_return(response)
           expect {
             connection.get("/node/bar")
           }.to raise_error PropertyValueException
@@ -159,7 +209,7 @@ module Neography
 
         it "raises NoSuchPropertyException" do
           response = error_response(code: 404, message: "a message", exception: "NoSuchPropertyException")
-          connection.client.stub(:get).and_return(response)
+          allow(connection.client).to receive(:request).and_return(response)
           expect {
             connection.get("/node/bar")
           }.to raise_error NoSuchPropertyException
@@ -167,7 +217,7 @@ module Neography
 
         it "raises RelationshipNotFoundException" do
           response = error_response(code: 404, message: "a message", exception: "RelationshipNotFoundException")
-          connection.client.stub(:get).and_return(response)
+          allow(connection.client).to receive(:request).and_return(response)
           expect {
             connection.get("/node/bar")
           }.to raise_error RelationshipNotFoundException
@@ -175,7 +225,7 @@ module Neography
 
         it "raises BadInputException" do
           response = error_response(code: 400, message: "a message", exception: "BadInputException")
-          connection.client.stub(:get).and_return(response)
+          allow(connection.client).to receive(:request).and_return(response)
           expect {
             connection.get("/node/bar")
           }.to raise_error BadInputException
@@ -183,7 +233,7 @@ module Neography
 
         it "raises UnauthorizedError" do
           response = error_response(code: 401)
-          connection.client.stub(:get).and_return(response)
+          allow(connection.client).to receive(:request).and_return(response)
           expect {
             connection.get("/node/bar")
           }.to raise_error UnauthorizedError
@@ -191,7 +241,7 @@ module Neography
 
         it "raises NeographyError in all other cases" do
           response = error_response(code: 418, message: "I'm a teapot.")
-          connection.client.stub(:get).and_return(response)
+          allow(connection.client).to receive(:request).and_return(response)
           expect {
             connection.get("/node/bar")
           }.to raise_error NeographyError
@@ -199,7 +249,7 @@ module Neography
 
         it "raises BadInputException" do
           response = error_response(code: 500, message: "a message", exception: "JsonParseException")
-          connection.client.stub(:get).and_return(response)
+          allow(connection.client).to receive(:request).and_return(response)
           expect {
             connection.get("/node/bar")
           }.to raise_error NeographyError
@@ -208,49 +258,51 @@ module Neography
       end
 
       context "query logging" do
-        before do
-          @logger = Logger.new(nil)
-          connection.logger = @logger
-          connection.log_enabled = true
-        end
 
-        let(:expected_response) {"expected_response"}
+        subject(:connection) do
 
-        let(:request_body) { {key1: :val1} }
+          Connection.new({
+            :logger => Logger.new(nil),
+            :log_enabled => true
+          })
+        
+          let(:expected_response) {"expected_response"}
 
-        it "should log query" do
-          connection.should_receive(:log).with("/db/data/node/bar", request_body).once
-          connection.get("/node/bar", {body: request_body})
-        end
+          let(:request_body) { {key1: :val1} }
 
-        it "should return original response" do
-          connection.stub(:evaluate_response).and_return expected_response
-          connection.get("/node/bar").should eq expected_response
-        end
-
-        describe "slow_log_threshold" do
-          before do
-            connection.stub(:evaluate_response).and_return expected_response
-          end
-
-          context "default value" do
-            it "should have output" do
-              @logger.should_receive(:info).once
-            end
-          end
-
-          context "high value" do
-            before { connection.slow_log_threshold = 100_000 }
-            it "should not have output" do
-              @logger.should_not_receive(:info)
-            end
-          end
-
-          after do
+          it "should log query" do
+            connection.should_receive(:log).with("/db/data/node/bar", request_body).once
             connection.get("/node/bar", {body: request_body})
           end
-        end
 
+          it "should return original response" do
+            connection.stub(:evaluate_response).and_return expected_response
+            connection.get("/node/bar").should eq expected_response
+          end
+
+          describe "slow_log_threshold" do
+            before do
+              allow(connection).to receive(:evaluate_response).and_return expected_response
+            end
+
+            context "default value" do
+              it "should have output" do
+                expect(@logger).to receive(:info).once
+              end
+            end
+
+            context "high value" do
+              before { connection.slow_log_threshold = 100_000 }
+              it "should not have output" do
+                expect(@logger).not_to receive(:info)
+              end
+            end
+
+            after do
+              connection.get("/node/bar", {body: request_body})
+            end
+          end
+        end
       end
     end
   end
